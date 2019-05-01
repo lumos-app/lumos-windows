@@ -164,7 +164,7 @@ begin
     FDatabase.SaveImage(lumosImage);
     FDatabase.Images.Add(lumosImage);
 
-    TImageRotation.Current.ResetOrientation(lumosImage);
+    TImageRotation.CreateThumbnail(lumosImage);
 
     jsonObj.Free;
 
