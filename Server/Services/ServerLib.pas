@@ -4,7 +4,7 @@ interface
 
 uses
   System.Generics.Collections, IdContext, IdCustomHTTPServer,
-  IdBaseComponent, IdComponent, IdCustomTCPServer, IdHTTPServer;
+  IdBaseComponent, IdComponent, IdCustomTCPServer, IdHTTPServer, DatabaseLib;
 
 type
   TCommandType = (ctGet, ctPost, ctDelete);
@@ -26,6 +26,7 @@ type
 
   TLumosServer = class(TObject)
   private
+    FDatabase: TDatabase;
     FRoutes: TObjectList<TLumosServerRoute>;
     FServer: TIdHTTPServer;
     procedure SetUpRoutes;
@@ -33,7 +34,6 @@ type
       AResponseInfo: TIdHTTPResponseInfo);
 
     procedure UploadImageRequest(ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
-    procedure GetSingleImageRequest(ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
     procedure GetImagesRequest(ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
   public
     constructor Create;
@@ -44,12 +44,13 @@ implementation
 
 uses
   System.SysUtils, System.JSON, ServerHelperLib, ImageLib, System.NetEncoding,
-  System.Classes;
+  System.Classes, ImageHelperLib;
 
 { TLumosServer }
 
 constructor TLumosServer.Create;
 begin
+  FDatabase := TDatabase.Create;
   FRoutes := TObjectList<TLumosServerRoute>.Create;
   FServer := TIdHTTPServer.Create(nil);
   FServer.OnCommandGet := ServerOnGet;
@@ -62,6 +63,7 @@ destructor TLumosServer.Destroy;
 begin
   FRoutes.Free;
   FServer.Free;
+  FDatabase.Free;
   inherited;
 end;
 
@@ -71,9 +73,6 @@ var
   jsonObj: TJSONObject;
   imageArray: TJSONArray;
   imageObj: TJSONObject;
-  inputStr: TFileStream;
-  outputStr: TStringStream;
-  sl: TStringList;
   image: TLumosImage;
 begin
   jsonObj := TJSONObject.Create;
@@ -81,43 +80,16 @@ begin
 
   imageArray := TJSONArray.Create;
 
-//  imageObj := TJSONObject.Create;
-//  imageObj.AddPair('uuid', '76A4C2CA-8548-463E-83A9-D8FFE3FB5D94');
-//  imageObj.AddPair('filename', '76A4C2CA-8548-463E-83A9-D8FFE3FB5D94.png');
-//  imageObj.AddPair('uploadedFrom', '???');
-//  imageObj.AddPair('totalViewCount', TJSONNumber.Create(0));
-//  imageObj.AddPair('show', TJSONBool.Create(true));
-//  imageObj.AddPair('createdDate', '2019-04-20');
-
-//  inputStr := TFileStream.Create('C:\temp\bilder\thumb.png', fmOpenRead or fmShareDenyWrite);
-//  outputStr := TStringStream.Create;
-//  TNetEncoding.Base64.Encode(inputStr, outputStr);
-//  imageObj.AddPair('data', outputStr.DataString);
-//  outputStr.SaveToFile('C:\temp\bilder\debug.txt');
-//  inputStr.Free;
-//  outputStr.Free;
-
-  image := TLumosImage.Create('76A4C2CA-8548-463E-83A9-D8FFE3FB5D94', 'Test', '');
-  imageObj := image.ToJSON;
-  image.Free;
-
-  imageArray.Add(imageObj);
+  for image in FDatabase.Images do
+  begin
+    imageObj := image.ToJSON;
+    imageArray.Add(imageObj);
+  end;
 
   jsonObj.AddPair('images', imageArray);
   AResponseInfo.ContentText := jsonObj.ToJSON;
 
-  sl := TStringList.Create;
-  sl.Text := jsonObj.ToJSON;
-  sl.SaveToFile('C:\temp\bilder\debug.json');
-  sl.Free;
-
   jsonObj.Free;
-end;
-
-procedure TLumosServer.GetSingleImageRequest(ARequestInfo: TIdHTTPRequestInfo;
-  AResponseInfo: TIdHTTPResponseInfo);
-begin
-
 end;
 
 procedure TLumosServer.ServerOnGet(AContext: TIdContext;
@@ -182,23 +154,23 @@ procedure TLumosServer.UploadImageRequest(ARequestInfo: TIdHTTPRequestInfo;
   AResponseInfo: TIdHTTPResponseInfo);
 var
   jsonObj: TJSONObject;
-  uuid: string;
-  name: string;
-  image: string;
   lumosImage: TLumosImage;
 begin
   try
     jsonObj := TJSONObject.ParseJSONValue(ARequestInfo.PostStreamAsString) as TJSONObject;
-    uuid := jsonObj.Values['uuid'].Value;
-    name := jsonObj.Values['name'].Value;
-    image := jsonObj.Values['image'].Value;
-    jsonObj.Free;
 
-    lumosImage := TLumosImage.Create(uuid, name, image);
-    lumosImage.Free;
+    lumosImage := TLumosImage.Create;
+    lumosImage.FromJSON(jsonObj);
+    FDatabase.SaveImage(lumosImage);
+    FDatabase.Images.Add(lumosImage);
+
+    TImageRotation.Current.ResetOrientation(lumosImage);
+
+    jsonObj.Free;
 
     jsonObj := TJSONObject.Create(TJSONPair.Create('result', 'success'));
     AResponseInfo.ContentText := jsonObj.ToJSON;
+    AResponseInfo.ResponseNo := 200;
     jsonObj.Free;
   except
     on E:Exception do

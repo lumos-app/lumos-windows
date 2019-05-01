@@ -3,62 +3,106 @@ unit ImageLib;
 interface
 
 uses
-  System.Classes, System.JSON;
+  System.Classes, System.JSON, Data.DB;
 
 type
   TLumosImage = class(TObject)
   private
-    FName: String;
     FUuid: String;
-    FImage: TMemoryStream;
-    function getFileName: String;
+    Ffilename: String;
+    FuploadedFrom: String;
+    FcreatedDate: TDateTime;
+    FlastViewedDate: TDateTime;
+    FtotalViewCount: Integer;
+    FsortViewCount: Integer;
+    Fshow: Boolean;
+    FIsUpdating: Boolean;
+    function getThumbnailFilename: String;
+    function getCompleteFileName: String;
   public
-    constructor Create(Uuid, Name, Image: String);
+    constructor Create;
     destructor Destroy;override;
 
+    procedure Assign(ds: TDataset);
+    procedure FromJSON(jsonObj: TJSONObject);
     function ToJSON: TJSONObject;
 
     property Uuid: String read FUuid;
-    property Filename: String read getFileName;
-    property Name: String read FName;
-    property Image: TMemoryStream read FImage;
+    property filename: String read Ffilename;
+    property uploadedFrom: String read FuploadedFrom;
+    property createdDate: TDateTime read FcreatedDate;
+    property lastViewedDate: TDateTime read FlastViewedDate;
+    property totalViewCount: Integer read FtotalViewCount;
+    property sortViewCount: Integer read FsortViewCount;
+    property show: Boolean read Fshow;
+
+    property CompleteFileName: String read getCompleteFileName;
+    property ThumbnailFilename: String read getThumbnailFilename;
+
+    property IsUpdating: Boolean read FIsUpdating write FIsUpdating;
   end;
 
 implementation
 
 uses
-  System.NetEncoding, System.SysUtils, OptionsLib;
+  System.NetEncoding, System.SysUtils, OptionsLib, Soap.XSBuiltIns,
+  System.IOUtils, System.DateUtils, DateHelperLib;
 
 { TLumosImage }
 
-constructor TLumosImage.Create(Uuid, Name, Image: String);
+procedure TLumosImage.Assign(ds: TDataset);
+begin
+  FUuid := ds.FieldByName('uuid').AsString;
+  Ffilename := ds.FieldByName('filename').AsString;
+  FuploadedFrom := ds.FieldByName('uploadedFrom').AsString;
+  FcreatedDate := ds.FieldByName('createdDate').AsDateTime;
+  FlastViewedDate := ds.FieldByName('lastViewedDate').AsDateTime;
+  FtotalViewCount := ds.FieldByName('totalViewCount').AsInteger;
+  FsortViewCount := ds.FieldByName('sortViewCount').AsInteger;
+  Fshow := ds.FieldByName('show').AsBoolean;
+end;
+
+constructor TLumosImage.Create;
+begin
+  Fshow := true;
+  FIsUpdating := false;
+end;
+
+destructor TLumosImage.Destroy;
+begin
+  inherited;
+end;
+
+procedure TLumosImage.FromJSON(jsonObj: TJSONObject);
 var
   inputStream: TStringStream;
   outputStream: TFileStream;
-  filename: string;
+  imageData: string;
+  tmpFileName: string;
 begin
-  FImage := TMemoryStream.Create;
+  FUuid := jsonObj.Values['uuid'].Value;
+  FuploadedFrom := jsonObj.Values['name'].Value;
+  imageData := jsonObj.Values['image'].Value;
 
-  FUuid := Uuid;
-  FName := Name;
-
-  inputStream := TStringStream.Create(Image);
-  filename := TServerOptions.Current.ImagePath+Uuid+'.png';
-  outputStream := TFileStream.Create(filename, fmCreate);
+  inputStream := TStringStream.Create(imageData);
+  Ffilename := Uuid+'.jpg';
+  tmpFileName := TServerOptions.Current.ImagePath+Uuid+'.jpg';
+  outputStream := TFileStream.Create(tmpFileName, fmCreate);
   TNetEncoding.Base64.Decode(inputStream, outputStream);
   inputStream.Free;
   outputStream.Free;
 end;
 
-destructor TLumosImage.Destroy;
+function TLumosImage.getCompleteFileName: String;
 begin
-  FImage.Free;
-  inherited;
+  Result := TPath.Combine(TServerOptions.Current.ImagePath, filename);
 end;
 
-function TLumosImage.getFileName: String;
+function TLumosImage.getThumbnailFilename: String;
 begin
-  Result := Uuid+'.png';
+  Result := TPath.Combine(TServerOptions.Current.ImagePath, 'thumbnails');
+  ForceDirectories(Result);
+  Result := TPath.Combine(Result, ChangeFileExt(filename, '')+'_thumb.jpg');
 end;
 
 function TLumosImage.ToJSON: TJSONObject;
@@ -68,25 +112,27 @@ var
   outputStr: TStringStream;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('uuid', 'Test');
-  Result.AddPair('filename', 'Test');
-  Result.AddPair('uploadedFrom', 'Dennis');
-  Result.AddPair('totalViewCount', TJSONNumber.Create(5));
-  Result.AddPair('show', TJSONBool.Create(true));
-  Result.AddPair('createdDate', '2019-04-20');
-//  Result.AddPair('data', '');
+  Result.AddPair('uuid', Uuid);
+  Result.AddPair('filename', filename);
+  Result.AddPair('uploadedFrom', uploadedFrom);
+  Result.AddPair('totalViewCount', TJSONNumber.Create(totalViewCount));
+  Result.AddPair('show', TJSONBool.Create(show));
+  Result.AddPair('createdDate', createdDate.ToISO8601);
 
-  inputStr := TFileStream.Create('C:\temp\bilder\thumb.png', fmOpenRead or fmShareDenyWrite);
-  outputStr := TStringStream.Create;
-  base64 := TBase64Encoding.Create(64);
-  base64.Encode(inputStr, outputStr);
-  Result.AddPair('data', 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAABGdBTUEAALGPC/' +
-                         'xhBQAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9YGARc5KB0XV+IAAAAd' +
-                         'dEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIFRoZSBHSU1Q72QlbgAAAF1JREFUGN' +
-                         'O9zL0NglAAxPEfdLTs4BZM4DIO4C7OwQg2JoQ9LE1exdlYvBBeZ7jqch9//q1u' +
-                         'H4TLzw4d6+ErXMMcXuHWxId3KOETnnXXV6MJpcq2MLaI97CER3N0vr4MkhoXe0rZigAAAABJRU5ErkJggg==');//outputStr.DataString);
-  inputStr.Free;
-  outputStr.Free;
+  if FileExists(ThumbnailFilename) then
+  begin
+    inputStr := TFileStream.Create(ThumbnailFilename, fmOpenRead or fmShareDenyWrite);
+    outputStr := TStringStream.Create('', TEncoding.UTF8);
+    base64 := TBase64Encoding.Create(64, '');
+    base64.Encode(inputStr, outputStr);
+    Result.AddPair('data', outputStr.DataString);
+    inputStr.Free;
+    outputStr.Free;
+    base64.Free;
+  end else
+  begin
+    Result.AddPair('data', '');
+  end;
 end;
 
 end.
