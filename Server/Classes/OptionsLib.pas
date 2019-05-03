@@ -12,11 +12,16 @@ type
     class function Current: TServerOptions;
   private
     function getImagePath: String;
+    function getDatabasePath: String;
   public
     property ImagePath: String read getImagePath;
+    property DatabasePath: String read getDatabasePath;
   end;
 
 implementation
+
+uses
+  System.IOUtils, System.SysUtils;
 
 { TServerOptions }
 
@@ -37,9 +42,17 @@ begin
   TServerOptions.globalServerOptions := nil;
 end;
 
+function TServerOptions.getDatabasePath: String;
+begin
+  Result := TPath.Combine(TPath.GetDownloadsPath, 'Lumos');
+  TDirectory.CreateDirectory(Result);
+end;
+
 function TServerOptions.getImagePath: String;
 begin
-  Result := 'C:\temp\bilder\';
+  Result := TPath.Combine(TPath.GetPicturesPath, 'Lumos');
+  TDirectory.CreateDirectory(Result);
+  Result := IncludeTrailingPathDelimiter(Result);
 end;
 
 end.

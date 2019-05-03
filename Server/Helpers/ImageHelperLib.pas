@@ -43,6 +43,8 @@ var
   deg: Integer;
   thumb: TBitmap;
   thumbFilename: string;
+  flipVertical: Boolean;
+  flipHorizontal: Boolean;
 begin
   image.IsUpdating := true;
   try
@@ -55,17 +57,27 @@ begin
       toBottomRight: deg := 180;
       toRightTop: deg := 90;
       toLeftBottom: deg := 270;
+      toRightBottom: deg := 90;
+      toLeftTop: deg := 270;
       else deg := 0;
     end;
+
+    flipVertical := false;
+    flipHorizontal := false;
+    case exif.Orientation of
+      toTopRight, toLeftTop, toRightBottom: flipHorizontal := true;
+      toBottomLeft: flipVertical := true;
+    end;
+
     exif.Free;
 
     bmp := TBitmap.Create;
     bmp.LoadFromFile(filename);
-    if deg <> 0 then
-    begin
-      bmp.Rotate(deg);
-      bmp.SaveToFile(filename);
-    end;
+    if flipVertical then bmp.FlipVertical;
+    if flipHorizontal then bmp.FlipHorizontal;
+    if deg <> 0 then bmp.Rotate(deg);
+    bmp.SaveToFile(filename);
+
     thumb := InternalCreateThumbnail(bmp, TSize.Create(200, 200), TAspectRatio.AspectFill);
     thumb.SaveToFile(thumbFilename);
     thumb.Free;

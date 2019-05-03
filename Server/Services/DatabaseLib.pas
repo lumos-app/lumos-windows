@@ -60,7 +60,7 @@ var
   databaseName: String;
 begin
   FImages := TLumosImageList.Create;
-  databaseName := TPath.Combine(TServerOptions.Current.ImagePath, 'images.db');
+  databaseName := TPath.Combine(TServerOptions.Current.DatabasePath, 'images.db');
   fConnection := TFDConnection.Create(nil);
   fConnection.Params.Add(Format('Database=%s', [databaseName]));
   fConnection.Params.Add('LockingMode=Normal');
