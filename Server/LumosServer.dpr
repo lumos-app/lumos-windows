@@ -3,7 +3,6 @@ program LumosServer;
 uses
   System.StartUpCopy,
   FMX.Forms,
-  LumosServerFrm in 'LumosServerFrm.pas' {LumosServerDlg},
   DatabaseLib in 'Services\DatabaseLib.pas',
   ServerLib in 'Services\ServerLib.pas',
   DateHelperLib in 'Helpers\DateHelperLib.pas',
@@ -25,10 +24,13 @@ uses
 
 {$R *.res}
 
+var
+  FServer: TLumosServer;
 begin
   ReportMemoryLeaksOnShutdown := true;
   Application.Initialize;
-  Application.CreateForm(TLumosServerDlg, LumosServerDlg);
+  FServer := TLumosServer.Create;
   Application.CreateForm(TDiashowDlg, DiashowDlg);
   Application.Run;
+  FServer.Free;
 end.

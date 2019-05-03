@@ -4,7 +4,8 @@ interface
 
 uses
   System.Generics.Collections, IdContext, IdCustomHTTPServer,
-  IdBaseComponent, IdComponent, IdCustomTCPServer, IdHTTPServer, DatabaseLib;
+  IdBaseComponent, IdComponent, IdCustomTCPServer, IdHTTPServer, DatabaseLib,
+  SimpleBonjourLib;
 
 type
   TCommandType = (ctGet, ctPost, ctDelete);
@@ -26,7 +27,8 @@ type
 
   TLumosServer = class(TObject)
   private
-    FDatabase: TDatabase;
+    FBonjourService: TBonjourPublishService;
+
     FRoutes: TObjectList<TLumosServerRoute>;
     FServer: TIdHTTPServer;
     procedure SetUpRoutes;
@@ -35,6 +37,8 @@ type
 
     procedure UploadImageRequest(ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
     procedure GetImagesRequest(ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
+
+    procedure PublishBonjourService;
   public
     constructor Create;
     destructor Destroy;override;
@@ -50,20 +54,22 @@ uses
 
 constructor TLumosServer.Create;
 begin
-  FDatabase := TDatabase.Create;
   FRoutes := TObjectList<TLumosServerRoute>.Create;
   FServer := TIdHTTPServer.Create(nil);
   FServer.OnCommandGet := ServerOnGet;
   SetUpRoutes;
   FServer.DefaultPort := 8082;
   FServer.Active := true;
+
+  FBonjourService := TBonjourPublishService.Create;
+  PublishBonjourService;
 end;
 
 destructor TLumosServer.Destroy;
 begin
   FRoutes.Free;
   FServer.Free;
-  FDatabase.Free;
+  FBonjourService.Free;
   inherited;
 end;
 
@@ -80,7 +86,7 @@ begin
 
   imageArray := TJSONArray.Create;
 
-  for image in FDatabase.Images do
+  for image in TDatabase.Current.Images.SortByCreateDate do
   begin
     imageObj := image.ToJSON;
     imageArray.Add(imageObj);
@@ -90,6 +96,17 @@ begin
   AResponseInfo.ContentText := jsonObj.ToJSON;
 
   jsonObj.Free;
+end;
+
+procedure TLumosServer.PublishBonjourService;
+var
+  serviceInfo: TBonjourService;
+begin
+  serviceInfo.ServiceName := 'Lumos Windows Server';
+  serviceInfo.ServiceType := '_lumos._tcp';
+  serviceInfo.ServicePort := 8082;
+
+  FBonjourService.publishService(serviceInfo);
 end;
 
 procedure TLumosServer.ServerOnGet(AContext: TIdContext;
@@ -161,10 +178,11 @@ begin
 
     lumosImage := TLumosImage.Create;
     lumosImage.FromJSON(jsonObj);
-    FDatabase.SaveImage(lumosImage);
-    FDatabase.Images.Add(lumosImage);
+    lumosImage.sortViewCount := TDatabase.Current.Images.getMaximumViewCount;
+    TDatabase.Current.SaveImage(lumosImage);
+    TDatabase.Current.Images.Add(lumosImage);
 
-    TImageRotation.CreateThumbnail(lumosImage);
+    TImageHelper.CreateThumbnailAsync(lumosImage);
 
     jsonObj.Free;
 

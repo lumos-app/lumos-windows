@@ -244,10 +244,6 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
-        <DCCReference Include="LumosServerFrm.pas">
-            <Form>LumosServerDlg</Form>
-            <FormType>fmx</FormType>
-        </DCCReference>
         <DCCReference Include="Services\DatabaseLib.pas"/>
         <DCCReference Include="Services\ServerLib.pas"/>
         <DCCReference Include="Helpers\DateHelperLib.pas"/>

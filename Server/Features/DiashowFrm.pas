@@ -5,21 +5,20 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Objects,
-  DatabaseLib, FMX.Layouts, FMX.ExtCtrls;
+  DatabaseLib, FMX.Layouts, FMX.ExtCtrls, ImageHelperLib;
 
 type
   TDiashowDlg = class(TForm)
     Timer1: TTimer;
-    ImageViewer1: TImageViewer;
-    procedure FormCreate(Sender: TObject);
-    procedure FormDestroy(Sender: TObject);
+    Image1: TImage;
+    Image2: TImage;
     procedure FormShow(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure FormHide(Sender: TObject);
   private
     { Private-Deklarationen }
-    FDatabase: TDatabase;
-    FImageIdx: Integer;
+    procedure ToggleImage;
   public
     { Public-Deklarationen }
   end;
@@ -30,7 +29,7 @@ var
 implementation
 
 uses
-  ImageLib;
+  ImageLib, FMX.Ani;
 
 {$R *.fmx}
 
@@ -39,20 +38,21 @@ begin
   Timer1.Enabled := false;
 end;
 
-procedure TDiashowDlg.FormCreate(Sender: TObject);
+procedure TDiashowDlg.FormHide(Sender: TObject);
 begin
-  FDatabase := TDatabase.Create;
   Timer1.Enabled := false;
-end;
-
-procedure TDiashowDlg.FormDestroy(Sender: TObject);
-begin
-  FDatabase.Free;
 end;
 
 procedure TDiashowDlg.FormShow(Sender: TObject);
 begin
-  FImageIdx := 0;
+  Timer1.Enabled := false;
+  Image2.Visible := false;
+
+  if Screen.DisplayCount > 1 then
+  begin
+    self.Bounds := Screen.Displays[1].WorkArea;
+    Self.WindowState := TWindowState.wsMaximized;
+  end;
   Timer1Timer(nil);
   Timer1.Enabled := true;
 end;
@@ -60,23 +60,58 @@ end;
 procedure TDiashowDlg.Timer1Timer(Sender: TObject);
 var
   image: TLumosImage;
+  bmp: TBitmap;
+  resizedBmp: TBitmap;
+  aspectRatio: TAspectRatio;
 begin
-  FDatabase.Refresh;
-  if FDatabase.Images.Count = 0 then exit;
+  if TDatabase.Current.Images.Count = 0 then exit;
   Timer1.Enabled := false;
   try
-    Inc(FImageIdx);
-    if FImageIdx >= FDatabase.Images.Count then FImageIdx := 0;
-
-    image := FDatabase.Images[FImageIdx];
-    if FileExists(image.CompleteFileName) and (not image.IsUpdating) then
+    image := TDatabase.Current.fetchNextImage;
+    if (image <> nil) and FileExists(image.CompleteFileName) and (not image.IsUpdating) then
     begin
-      ImageViewer1.Bitmap.LoadFromFile(FDatabase.Images[FImageIdx].CompleteFileName);
-      ImageViewer1.BestFit;
+      bmp := TBitmap.Create;
+      bmp.LoadFromFile(image.CompleteFileName);
+      if bmp.IsLandscape then aspectRatio := TAspectRatio.AspectFill else aspectRatio := TAspectRatio.AspectFit;
+      resizedBmp := TImageHelper.getAspectBitmap(bmp, Image1.Size.Size, aspectRatio);
+
+      if Image1.Visible then
+      begin
+        Image2.Bitmap.Assign(resizedBmp);
+      end else
+      begin
+        Image1.Bitmap.Assign(resizedBmp);
+      end;
+      bmp.Free;
+      resizedBmp.Free;
+
+      ToggleImage;
     end;
   finally
     Timer1.Enabled := true;
   end;
+end;
+
+procedure TDiashowDlg.ToggleImage;
+var
+  VisibleImage: TImage;
+  HiddenImage: TImage;
+begin
+  if Image1.Visible then
+  begin
+    VisibleImage := Image1;
+    HiddenImage := Image2;
+  end else
+  begin
+    VisibleImage := Image2;
+    HiddenImage := Image1;
+  end;
+
+  HiddenImage.Opacity := 0;
+  HiddenImage.Visible := true;
+  TAnimator.AnimateFloat(VisibleImage, 'Opacity', 0, 2);
+  TAnimator.AnimateFloatWait(HiddenImage, 'Opacity', 1, 2);
+  VisibleImage.Visible := false;
 end;
 
 end.

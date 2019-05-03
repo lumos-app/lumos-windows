@@ -8,21 +8,34 @@ uses FireDAC.Stan.Intf, FireDAC.Stan.Option,
   FireDAC.Phys.SQLiteDef, FireDAC.Stan.ExprFuncs, FireDAC.Stan.Param,
   FireDAC.DatS, FireDAC.DApt.Intf, FireDAC.DApt, FireDAC.Comp.UI, Data.DB,
   FireDAC.Comp.DataSet, FireDAC.Comp.Client, ImageLib, System.Generics.Collections,
-  FireDAC.FMXUI.Wait;
+  FireDAC.FMXUI.Wait, System.Generics.Defaults, System.DateUtils;
 
 type
   TLumosImageList = class(TObjectList<TLumosImage>)
   public
     function Contains(uuid: String): Boolean;
+    function getMaximumViewCount: Integer;
+
+    function firstNotViewed: TLumosImage;
+    procedure SortByViewCount;
+
+    function SortByCreateDate: TArray<TLumosImage>;
   end;
 
   TDatabase = class(TObject)
+  private
+    class var global: TDatabase;
+  public
+    class constructor Create;
+    class destructor Destroy;
+    class function Current: TDatabase;
   private
     fConnection: TFDConnection;
     tbImages: TFDTable;
     FImages: TLumosImageList;
     procedure CreateTable;
     procedure LoadImages;
+    procedure SaveViewCount(image: TLumosImage);
   public
     constructor Create;
     destructor Destroy;override;
@@ -30,13 +43,15 @@ type
     procedure Refresh;
     procedure SaveImage(image: TLumosImage);
 
+    function fetchNextImage: TLumosImage;
+
     property Images: TLumosImageList read FImages;
   end;
 
 implementation
 
 uses
-  OptionsLib, System.IOUtils, System.SysUtils;
+  OptionsLib, System.IOUtils, System.SysUtils, System.Math;
 
 { TDatabase }
 
@@ -61,6 +76,11 @@ begin
   LoadImages;
 end;
 
+class constructor TDatabase.Create;
+begin
+  TDatabase.global := nil;
+end;
+
 procedure TDatabase.CreateTable;
 var
   q: string;
@@ -78,12 +98,46 @@ begin
   fConnection.ExecSQL(q);
 end;
 
+class function TDatabase.Current: TDatabase;
+begin
+  if global = nil then global := TDatabase.Create;
+  Result := global;
+end;
+
+class destructor TDatabase.Destroy;
+begin
+  TDatabase.global.Free;
+  TDatabase.global := nil;
+end;
+
 destructor TDatabase.Destroy;
 begin
   FImages.Free;
   tbImages.Free;
   fConnection.Free;
   inherited;
+end;
+
+function TDatabase.fetchNextImage: TLumosImage;
+var
+  firstNotViewed: TLumosImage;
+begin
+  Result := nil;
+  Images.SortByViewCount;
+  if Images.Count > 0 then
+  begin
+    firstNotViewed := Images.firstNotViewed;
+    if firstNotViewed <> nil then
+    begin
+      Result := firstNotViewed;
+    end else
+    begin
+      Result := Images.First;
+    end;
+    Result.lastViewedDate := Now;
+    Result.IncViewCount;
+    SaveViewCount(Result);
+  end;
 end;
 
 procedure TDatabase.LoadImages;
@@ -130,10 +184,22 @@ begin
   tbImages.FieldByName('uploadedFrom').AsString := image.uploadedFrom;
   tbImages.FieldByName('createdDate').AsDateTime := Now;
   tbImages.FieldByName('lastViewedDate').AsDateTime:= 0;
-  tbImages.FieldByName('totalViewCount').AsInteger := 0;
-  tbImages.FieldByName('sortViewCount').AsInteger := 0;
+  tbImages.FieldByName('totalViewCount').AsInteger := image.totalViewCount;
+  tbImages.FieldByName('sortViewCount').AsInteger := image.sortViewCount;
   tbImages.FieldByName('show').AsBoolean := true;
   tbImages.Post;
+end;
+
+procedure TDatabase.SaveViewCount(image: TLumosImage);
+begin
+  if tbImages.Locate('uuid', image.Uuid) then
+  begin
+    tbImages.Edit;
+    tbImages.FieldByName('lastViewedDate').AsDateTime := Now;
+    tbImages.FieldByName('totalViewCount').AsInteger := image.totalViewCount;
+    tbImages.FieldByName('sortViewCount').AsInteger := image.sortViewCount;
+    tbImages.Post;
+  end;
 end;
 
 { TLumosImageList }
@@ -150,6 +216,52 @@ begin
       Result := true;
     end;
   end;
+end;
+
+function TLumosImageList.firstNotViewed: TLumosImage;
+var
+  image: TLumosImage;
+begin
+  Result := nIl;
+  for image in Self do
+  begin
+    if image.lastViewedDate = 0 then
+    begin
+      Result := image;
+      break;
+    end;
+  end;
+end;
+
+function TLumosImageList.getMaximumViewCount: Integer;
+var
+  image: TLumosImage;
+begin
+  Result := 0;
+  for image in Self do
+  begin
+    Result := Max(Result, image.totalViewCount);
+  end;
+end;
+
+function TLumosImageList.SortByCreateDate: TArray<TLumosImage>;
+begin
+  Result := Self.ToArray;
+  TArray.Sort<TLumosImage>(Result, TComparer<TLumosImage>.Construct(
+    function (const item1, item2: TLumosImage): Integer
+    begin
+      Result := CompareDateTime(item1.createdDate, item2.createdDate)*-1;
+    end));
+end;
+
+procedure TLumosImageList.SortByViewCount;
+begin
+  Self.Sort(TComparer<TLumosImage>.Construct(
+    function(const item1, item2: TLumosImage): Integer
+    begin
+      Result := CompareValue(item1.sortViewCount, item2.sortViewCount);
+      if Result = 0 then Result := CompareDateTime(item1.lastViewedDate, item2.lastViewedDate);
+    end));
 end;
 
 end.

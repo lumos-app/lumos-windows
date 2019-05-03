@@ -26,14 +26,15 @@ type
     procedure Assign(ds: TDataset);
     procedure FromJSON(jsonObj: TJSONObject);
     function ToJSON: TJSONObject;
+    procedure IncViewCount;
 
     property Uuid: String read FUuid;
     property filename: String read Ffilename;
     property uploadedFrom: String read FuploadedFrom;
     property createdDate: TDateTime read FcreatedDate;
-    property lastViewedDate: TDateTime read FlastViewedDate;
-    property totalViewCount: Integer read FtotalViewCount;
-    property sortViewCount: Integer read FsortViewCount;
+    property lastViewedDate: TDateTime read FlastViewedDate write FlastViewedDate;
+    property totalViewCount: Integer read FtotalViewCount write FtotalViewCount;
+    property sortViewCount: Integer read FsortViewCount write FsortViewCount;
     property show: Boolean read Fshow;
 
     property CompleteFileName: String read getCompleteFileName;
@@ -103,6 +104,12 @@ begin
   Result := TPath.Combine(TServerOptions.Current.ImagePath, 'thumbnails');
   ForceDirectories(Result);
   Result := TPath.Combine(Result, ChangeFileExt(filename, '')+'_thumb.jpg');
+end;
+
+procedure TLumosImage.IncViewCount;
+begin
+  Inc(FtotalViewCount);
+  Inc(FsortViewCount);
 end;
 
 function TLumosImage.ToJSON: TJSONObject;
