@@ -16,6 +16,7 @@ type
     procedure Timer1Timer(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure FormHide(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
   private
     { Private-Deklarationen }
     procedure ToggleImage;
@@ -36,6 +37,16 @@ uses
 procedure TDiashowDlg.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   Timer1.Enabled := false;
+end;
+
+procedure TDiashowDlg.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+var
+  visibleCount: Integer;
+begin
+  visibleCount := 0;
+  if Image1.Visible then Inc(visibleCount);
+  if Image2.Visible then Inc(visibleCount);
+  CanClose := visibleCount = 1;
 end;
 
 procedure TDiashowDlg.FormHide(Sender: TObject);

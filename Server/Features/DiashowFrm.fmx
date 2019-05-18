@@ -9,6 +9,7 @@ object DiashowDlg: TDiashowDlg
   FormFactor.Height = 480
   FormFactor.Devices = [Desktop]
   OnClose = FormClose
+  OnCloseQuery = FormCloseQuery
   OnShow = FormShow
   OnHide = FormHide
   DesignerMasterStyle = 0
