@@ -19,7 +19,7 @@ type
     constructor Create;
     destructor Destroy;override;
 
-    procedure publishService(serviceInfo: TBonjourService);
+    function publishService(serviceInfo: TBonjourService): Boolean;
   end;
 
 implementation
@@ -44,29 +44,40 @@ begin
   inherited;
 end;
 
-procedure TBonjourPublishService.publishService(serviceInfo: TBonjourService);
+function TBonjourPublishService.publishService(serviceInfo: TBonjourService): Boolean;
 var
   flags: TDNSServiceFlags;
   pName: AnsiString;
   sType: AnsiString;
   fPort: Word;
 begin
-  flags := 0;
-  pName := AnsiString(serviceInfo.ServiceName);
-  sType := AnsiString(serviceInfo.ServiceType);
-  fPort := serviceInfo.ServicePort;
-  DNSServiceRegister(fHandle,
-                     flags,
-                     0   { interfaceID - register on all interfaces },
-                     PAnsiChar(pName),
-                     PUTF8Char(sType),
-                     NIL { domain - register in all available },
-                     NIL { hostname - use default },
-                     htons(fPort),
-                     0   { txtLen },
-                     nil, { txtRecord }
-                     nil,
-                     self);
+  if Not BonjourInstalled then
+  begin
+    Result := false;
+  end else
+  begin
+    try
+      Result := true;
+      flags := 0;
+      pName := AnsiString(serviceInfo.ServiceName);
+      sType := AnsiString(serviceInfo.ServiceType);
+      fPort := serviceInfo.ServicePort;
+      DNSServiceRegister(fHandle,
+                         flags,
+                         0   { interfaceID - register on all interfaces },
+                         PAnsiChar(pName),
+                         PUTF8Char(sType),
+                         NIL { domain - register in all available },
+                         NIL { hostname - use default },
+                         htons(fPort),
+                         0   { txtLen },
+                         nil, { txtRecord }
+                         nil,
+                         self);
+    except
+      Result := false;
+    end;
+  end;
 end;
 
 end.
